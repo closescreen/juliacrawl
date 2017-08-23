@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+#>  переменые по доменам и сайтзонам
+set -u
+set -x
+cd `dirname $0`
+
+# можно указать параметр: папка download/<дата>/, где лежит stat.base.bugs.gz и туда же положить результат
+prelast_dir=${1:-""} 
+# пример: ~/share3/TIKETS/RND-195/DOWNLOAD/2016-07-18
+
+if [[ -z "$prelast_dir" ]]; then
+    # без параметра, вычислает папку маостоятельно: за предпосленее число
+    # папке
+    down=`conf 00-RND-195.conf download_root`
+    # найти папки по дням и взять предпоследнюю (потому, что последняя сейчас наполняется)
+    prelast_dir=$(  find "$down" -maxdepth 1 -type d -wholename "*/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]" | 
+	sort | tail -n2 | head -n1 )
+fi
+
+[[ -z "$prelast_dir" ]] && echo "not found prelast dir">&2 && exit 1
+down="$(dirname "$prelast_dir")/" # donwload_dir без даты
+prelast_day=`basename "$prelast_dir"` # только дата из doewnload_dir
+
+
+# ---------------------------------------------- dom_vars_bugs -----------------------------------------------------------
+# здесь только в разрезе доменов - по багам
+# stat.base.bugs.gz --> dom_vars_bugs.gz:
+if [[ ! -s "$prelast_dir/dom_vars_bugs.gz" ]]; then
+
+    # Там должен существовать stat.base.bugs.gz (как источник данных):
+    [[ ! -s "$prelast_dir/stat.base.bugs.gz" ]] && exit 0 # && "Not found $prelast_dir/stat.base.bugs.gz">&2
+    
+    cmd="zcat \"$prelast_dir/stat.base.bugs.gz\" | ./64.bugs-vars | viatmp -gz \"$prelast_dir/dom_vars_bugs.gz\" "
+    netflag -cmd="$cmd" -file="$prelast_dir/dom_vars.gz.FLAG"
+
+    [[ ! -s "$prelast_dir/dom_vars_bugs.gz" ]] && echo "Can't create $prelast_dir/dom_vars_bugs.gz">&2 && exit 1
+
+fi
+
+# ----------------------------------------------- dom_vars ----------------------------------------------
+#  dom_vars_bugs.gz + stat.base.maintext.gz --> dom_vars.gz
+# здесь объединяется в разрезе доменов по багам + по чистому тексту
+if [[ ! -s "$prelast_dir/dom_vars.gz" ]]; then
+
+    # Там должен существовать stat.base.bugs.gz (как источник данных):
+    [[ ! -s "$prelast_dir/stat.base.maintext.gz" ]] && exit 0 # && "Not found $prelast_dir/stat.base.bugs.gz">&2
+    
+
+    cmd="join <(zcat \"$prelast_dir/dom_vars_bugs\") <(zcat \"$prelast_dir/stat.base.maintext.gz\") -t* -a1 -a2 -oauto -eNA |
+	viatmp -gz \"$prelast_dir/dom_vars.gz\""
+
+
+    netflag -cmd="$cmd" -file="$prelast_dir/dom_vars.gz.FLAG"
+
+    [[ ! -s "$prelast_dir/dom_vars.gz" ]] && echo "Can't create $prelast_dir/dom_vars.gz">&2 && exit 1
+
+fi
+
+
+
+# ---------------------------------------- dom_vars_Nweeks.gz -------------------------------------------------------
+# dom_vars.gz --> dom_vars_Nweeks.gz
+weeksf=`find $prelast_dir -maxdepth 1 -name "dom_vars_[1-4]weeks.gz" | sort | tail -n1`
+if [[ -z "$weeksf" ]]; then
+    olds_dom_vars=` find "$down" -maxdepth 2  -name "dom_vars.gz" | only -older="$prelast_day" --lines | sort | tail -n3 `
+    ff=""
+    Nweeks="0"
+    if [[ -n "$olds_dom_vars" ]]; then
+	ff="$prelast_dir/dom_vars.gz $olds_dom_vars"
+	Nweeks=$(( `echo "$olds_dom_vars" | wc -l` + 1 ))
+    else
+	Nweeks=`find  $prelast_dir/ -maxdepth 1  -name "dom_vars.gz" | wc -l`
+	ff="$prelast_dir/dom_vars.gz"
+	#exit 0
+	#echo "Not found old dom_vars files">&2 && exit 0 # дальше он потребуется и нет смысла продолжать
+    fi
+    
+    [[ "$Nweeks" -eq 0 || -z "$Nweeks" ]] && echo "Unknown ERROR! nweeks==0">&2 && exit 1
+    LANG=POSIX mergef -ff="$prelast_dir/dom_vars.gz $olds_dom_vars" -k=1,1 -stdout | # мержим по первому полю 
+	    #(НО НЕ СОБЛЮДАЕТСЯ ПРИОРИТЕТ ПОСЛЕДНЕГО! зато цифры будут лезть перед NA)
+	    awk -F* '$1!=OLDDOM{ print $0; OLDDOM=$1 }' | # отбираем по первой строчке от каждого домена
+	    viatmp -gz "$prelast_dir/dom_vars_${Nweeks}weeks.gz"
+    
+else
+    Nweeks=`echo $weeksf | perl -lane'/(\d)weeks/ and print $1'`
+        
+fi    
+
+
+# ------------------------------------------- sz_vars_4weeks.gz --------------------------------------------------------------
+# dom_vars_Nweeks.gz --> sz_vars_4weeks.gz:
+if [[ ! -s "$prelast_dir/sz_vars_${Nweeks}weeks.gz" ]]; then
+    dom_vars_NF=`zcat "$prelast_dir/dom_vars_${Nweeks}weeks.gz" | head -n1 | awk -F* '{print NF}'`
+    dom_vars_fields_list=`seq 2 $dom_vars_NF | words -ot=','` # список номеров полей через запятую
+
+    cat ./copyed/1460.$prelast_day.dom_orig_sid_sz.txt |
+      awk -F* -vOFS=* '{print $3":"$4,$1}' |
+      addf -k=2 -dict <(zcat "$prelast_dir/dom_vars_${Nweeks}weeks.gz" ) -dadd="$dom_vars_fields_list" |
+      viatmp -gz "$prelast_dir/sz_vars_${Nweeks}weeks.gz"
+fi
+
+
+# ---------------------------------------------- sz_vars.conv.gz ----------------------------------------------------------
+# sz_vars_4weeks.gz --> sz_vars.conv.gz:
+if [[ ! -s "$prelast_dir/sz_vars.conv.gz" ]]; then
+    zcat "$prelast_dir/sz_vars_${Nweeks}weeks.gz" | ./64.conv | viatmp -gz "$prelast_dir/sz_vars.conv.gz"
+fi
+
+
+# -------------------------------------------- sz_vars.conv.diff.gz -------------------------------------------------------
+# sz_vars.conv.gz(prelast) + sz_vars.conv.gz(prelast-1) --> sz_vars.conv.diff.gz
+if [[ ! -s "$prelast_dir/sz_vars.conv.diff.gz" && ! -s "$prelast_dir/sz_vars.conv.FULL.diff.gz" ]]; then
+
+    old_conv=$( find "$down" -maxdepth 2  -name "sz_vars.conv.gz" | only -older="$prelast_day" --lines | sort | tail -n1 )
+    
+    if [[ -n "$old_conv" ]]; then # найден предыдущий conv
+	diff_base_name="sz_vars.conv.diff.gz"
+    else 
+	diff_base_name="sz_vars.conv.FULL.diff.gz"
+    fi		
+    
+    (
+    if [[ -n "$old_conv" ]]; then # найден предыдущий conv
+	# .. diff
+	# у каждого файла исх формат 1.id * 2.dbcat * 3.val * 4.vardesc * 5.sidszdesc * 6.valdesc
+	join -t* -a1 -a2 -o0,1.2,2.2 \
+	    <( zcat "$old_conv" | awk -F* -vOFS=* '{print $1"+"$2,$3}' | sort -t\* -k1,1 ) \
+	    <( zcat "$prelast_dir/sz_vars.conv.gz" |
+		awk -F* -vOFS=* '{print $1"+"$2,$3}' | sort -t\* -k1,1 )  # out: 1.id"+"2.dbcat * valold * valnew
+    else
+	# .. full (only new vals)
+	join -t* -a1 -a2 -o0,1.2,2.2  \
+	    <(echo -n "")  \
+	    <( zcat "$prelast_dir/sz_vars.conv.gz" | awk -F* -vOFS=* '{print $1"+"$2,$3}' )  # out: 1.id"+"2.dbcat * * valnew
+    fi
+    ) |
+    awk -F'[*+]' -vOFS=* '{print $1,$2,$3,$4,$3!=""&&$4!=""&&$3==$4?"NOP": $3!=""&&$4!=""&&$3!=$4?"INSERT" : $3!=""&&$4==""?"DELETE" : $3==""&&$4!=""?"INSERT" : "--err!--"}' |
+    viatmp -gz "$prelast_dir/$diff_base_name"
+fi
+
+
+
+
+
+
+
+

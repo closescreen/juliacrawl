@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+#> script [download-dir] [randn] [deb] [stat]
+set -u
+set +x
+set -o pipefail
+cd `dirname $0`
+
+source ./00.setenv.sh
+
+N=4 # кол-во одновременных процессов (каждый - по своему домену) скачивающих страницы по найденным ссылкам
+
+if [[ ${1:-""} == "start" ]];then shift && nice fork -pf="$0.pids" -n="$N" -dela=3 -ed=s "$0 $@"  --wait
+elif [[ ${1:-""}  == "stop" ]];then shift && fork -pf="$0.pids" -kila
+else 
+# -----------------
+
+ #>1:
+ download_dir=${1:-""}
+ [[ -z "$download_dir" ]] && download_dir=`conf 00-RND-195.conf download_dir`
+
+
+ #>2:
+ randn=${2:-"4"} # можно указать сколько (случайных) тегов брать из ROOT.tags
+
+ #>3:
+ deb=${3:-""}
+ [[ -n "$deb" ]] && set -x
+
+ #>4:
+ stt=${4:-""}
+
+ ./core/level2.saved "$download_dir" "$randn" "$deb" "$stt"
+
+
+# ------------------ 
+fi
+
+

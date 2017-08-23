@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+#> script [start|stop] [download-dir] ["deb|stat"]
+set -u
+set +x
+set -o pipefail
+cd `dirname $0`
+
+source ./00.setenv.sh
+
+N=3 # количество одновременных процессов парсящих сохраненные страницы
+
+if [[ ${1:-""} == "start" ]];then shift && nice fork -pf="$0.pids" -n="$N" -dela=10 -ed=s "$0 $@" --wait
+elif [[ ${1:-""}  == "stop" ]];then shift && fork -pf="$0.pids" -kila
+else 
+
+ #>1:
+ download_dir=${1:-""}
+ [[ -z "$download_dir" ]] && download_dir=`conf 00-RND-195.conf download_dir`
+ 
+ #>2:
+ deb_stat=${2:-""}
+ 
+ if [[ -d "$download_dir" ]]; then
+    find "$download_dir" -name "*.saved" | julia "./core/saved-tags.jl" $@
+ else
+    # когда параметр - файл(ы)    
+    saved_files=`echo "$download_dir" | only -s --lines`
+    [[ -z "$saved_files" ]] && echo "Files!">&2 && exit 1
+    echo "$saved_files" | julia "./core/saved-tags.jl" $@
+ fi
+
+fi
+
+
+

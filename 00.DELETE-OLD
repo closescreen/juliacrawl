@@ -1,33 +1,32 @@
 #!/usr/bin/env bash
 #> Удаляет старые данные.
-#(
+# старые данные из ./copyed/
 set -u
 set +x
 cd `dirname $0`
 
-# find all download dirs:
-dirs=`find ./DOWNLOAD/ -maxdepth 1  -type d -name "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]" | sort`
-
-# all its count:
-allcount=`echo "$dirs" | wc -l`
-
-# how many last to keep (do not delete)
-# сколько последних папок ./DOWNLOADS/(yyyy-mm-dd) оставлять (не удалять):
-currentcount=8
-
-# how many dirs to delete:
-todelcount=$(( $allcount - $currentcount > 0 ? $allcount - $currentcount : 0 ))
-
-# dirs to delete:
-todeldirs=`echo "$dirs" | head -n"$todelcount"`
-
-for diri in $todeldirs; do
-    #echo "`date +\"%F %H:%M\"`: Delete old directory: $diri"
-    rm -r $diri
-done
-
-# первый день старее которого данные удалены:
-#firstcurrentday=`find ./DOWNLOAD/ -maxdepth 1  -type d -name "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]" | sort | head -n1 | fn2days`
+source ./00.setenv.sh
 
 
-#)>>"$0.log" 2>&1
+
+# самый свежий день в копиед:
+last_copyed_day=`find ./copyed/ -name "*[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*" | sort | tail -n1 | fn2days` # на примере net.0.domains.gz
+
+if [[ -n "$last_copyed_day" ]]; then
+    
+    # будем хранить 4 недели от самого свежего дня
+
+    oldday=`hours -t="$last_copyed_day" -n=-28days -days -first`
+
+    files_to_del=`find ./copyed/ -type f | only --older="$oldday"`
+
+    if [[ -n "$files_to_del" ]]; then
+        rm $files_to_del
+    else
+        echo "Not found in ./copyed/ older then $oldday">&2
+    fi    
+            
+else
+    echo "Nothing to delete from ./copyed. ($0)">&2
+fi
+

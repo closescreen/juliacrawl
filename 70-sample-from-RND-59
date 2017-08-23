@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+#>
+(
+set -u
+set +x
+set -o pipefail
+cd `dirname $0`
+
+resdir="../RESULT"
+
+h=`hours -d=today -n=1 -first`
+f=`files "$resdir/%F/%H_conv.gz" "$h"`
+
+echo "$f" |
+ washing -cmd="./get_lines | ./53_s2c_handmade_conv | sort -u -k1,1n -k2,2n" -comp=gzip 
+ 
+prev=`fn2hours $f | hours -n=-1 -first | files "$resdir/%F/%H_conv.gz" | only -s`
+
+dif=$(files "$resdir/%F/%H_diff.gz" $h) 
+
+
+if [[ ! -s "$dif" ]]; then
+    if [[ -s "$prev" ]]; then 
+	LANG=POSIX sort -T. -m -k1,1n -k2,2n <( 
+	zcat "$f" | awk -vOFS="\t" '{print $0,"C"}' ) <( 
+	zcat "$prev" | awk -vOFS="\t" '{print $0,"P"}' ) |
+	./53_s2c_handmade_diff |
+	viatmp -gz "$dif"
+    else
+	zcat "$f" | awk -vOFS="\t" '{print $0,"C"}' |
+	./53_s2c_handmade_diff |
+	viatmp -gz "$dif"
+    fi	
+fi
+
+
+if [[ -s "$dif" && ! -s ${dif}.sent ]]; then
+ zcat "$dif" | ./53_set_s2c_handmade_for_bidder | viatmp ${dif}.sent
+fi
+
+)>>"$0.log" 2>&1

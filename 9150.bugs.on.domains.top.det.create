@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+#>
+#(
+set -u
+set +x
+#set -o pipefail
+cd `dirname $0`
+
+download_dir=${1:-""}
+[[ -z "$download_dir" ]] && download_dir=`conf 00-RND-195.conf download_dir`
+
+
+bugs_on_domains="$download_dir/bugs.on.domains.gz"
+[[ ! -s "${bugs_on_domains}" ]] && echo "Not found ${bugs_on_domains}">&2 && exit 1
+
+zcat "$bugs_on_domains" | head -n20 | cut -d* -f4 | # top-20 частоты встречающихся bugs, 4-я колонка в фотмате <name::category>
+ sed -e's/\:\:/\*/' | # теперь через *: name category
+ while IFS=* read name categ; do
+    nameesc=`echo "$name" | sed -e's|\W|_|g' `
+    res_basename="top.details.$nameesc.$categ.gz" # имя отчета
+    res="$download_dir/zzzz-top.details/$res_basename"
+    mkdir -p `dirname "$res"`
+    find "$download_dir/" -name "*.bugs"  |
+     while read bugs; do 
+        cat "$bugs"; 
+     done |
+      awk -F* -vOFS=* -v"name=$name" -v"categ=$categ" '$3==name && $4==categ {print}' |
+       sort | uniq -c | sort -nr | head -n20 | viatmp -gz "$res"
+ done
+
+#)>>"$0.log" 2>&1

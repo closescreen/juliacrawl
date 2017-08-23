@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+#>
+set -u
+set +x
+set -o pipefail
+cd `dirname $0`
+
+source ./00.setenv.sh
+
+N=4 # кол-во одновременных процессов 
+
+if [[ ${1:-""} == "start" ]];then shift && nice fork -pf="$0.pids" -n="$N" -dela=10 -ed=s "$0 $@"  --wait
+elif [[ ${1:-""}  == "stop" ]];then shift && fork -pf="$0.pids" -kila
+else 
+# -----------------
+
+ #>1:
+ download_dir=${1:-""}
+ [[ -z "$download_dir" ]] && download_dir=`conf 00-RND-195.conf download_dir`
+
+ #>2:
+ deb=${2:-""}
+ [[ -n "$deb" ]] && set -x
+
+ #>3:
+ stt=${3:-""}
+
+ ./core/tags-bugs "$download_dir" "$deb" "$stt"
+
+# -------------------
+fi
+

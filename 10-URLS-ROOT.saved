@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+#> По списку урлов из ./copyed/ "urls.hist.$download_day.gz"
+#> Скачивает урлы (а не домены). 
+#> script [start|stop] [download-dir] doms-fille ["deb"] ["stat"]
+
+set -u
+set +x
+set -o pipefail
+cd `dirname $0`
+
+
+ 
+source ./00.setenv.sh
+ 
+N=1 # количество одновременных процессов, скачивающих урлы
+ 
+if [[ ${1:-""} == "start" ]];then shift && fork -pf="$0.pids" -n="$N" -dela=10 -ed=s "$0 $*"  --wait
+elif [[ ${1:-""}  == "stop" ]];then shift && fork -pf="$0.pids" -kila
+else 
+ 
+ #>1:
+ download_dir=${1:-""}
+ [[ -z "$download_dir" ]] && download_dir=`conf 00-RND-195.conf download_dir`
+
+ 
+ #>2:
+ urls=${2:-""} # параметр может определять файл с доменами
+ if [[ -z "$urls" ]]; then
+    download_day=`echo "$download_dir" | fn2days`
+    urls=`find ./copyed/ -type f -name "urls.hist.$download_day.gz"`
+    #[[ -z "$urls" ]] && echo "$0: not found urls files in ./copyed/.">&2 && exit 1
+    [[ -z "$urls" ]] && exit 1
+ fi
+ 
+ #>3:
+ deb=${3:-""}
+ [[ -n "$deb" ]] && set -x
+ 
+ #>4:
+ stats=${4:-""}
+ 
+ 
+ # возможно список урлов будет большим, пока не сортируем
+ zcat $urls |
+  awk -F* '$1>200' | # только где количество посещений за день больше указанного
+  cut -d* -f2 | # views(кол-во посещений) * url. Требуется только первое поле 
+  ./core/in.urls-saved "$download_dir" "$deb" "$stats"
+ 
+fi
+
+

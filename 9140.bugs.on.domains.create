@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+#>
+#(
+set -u
+set +x
+set -o pipefail
+cd `dirname $0`
+
+download_dir=${1:-""}
+[[ -z "$download_dir" ]] && download_dir=`conf 00-RND-195.conf download_dir`
+
+
+stat_base_file="$download_dir/stat.base.bugs.gz"
+[[ ! -s "${stat_base_file}" ]] && echo "Not found ${stat_base_file}">&2 && exit 1
+
+parsed_domains=`zcat "$stat_base_file" | awk -F* -vOFS=* '$3!="NA"{print $1}' | sort | uniq | wc -l`
+
+zcat ${stat_base_file} | awk -F* -vOFS=* '$3!="NA"{print $3,$1}' | sort |
+    summator -fu=cnt |
+    grep -v -P '\=|\%' |
+    awk -F* -vOFS=* -v"parsed_doms=$parsed_domains" '{print $2,parsed_doms,$2/parsed_doms,$1}' |
+    sort -t\* -k1,1nr |
+    viatmp -gz "$download_dir/bugs.on.domains.gz"
+
+#)>>"$0.log" 2>&1

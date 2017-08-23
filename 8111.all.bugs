@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+#>
+#(
+set -u
+set +x
+set -o pipefail
+cd `dirname $0`
+
+#>:1
+download_dir=${1:? download_dir! }
+
+find "$download_dir" -name "ROOT.saved.url" |
+ while read root_saved_url_file; do
+  root_url=`cat $root_saved_url_file | sed -e's/[\"\ ]//g'`
+  root_dir=`dirname $root_saved_url_file`
+  find "$root_dir" -name "*.bugs" |
+   while read bugs_file; do
+    saved_url_file=`echo "$bugs_file" | sed -e's/\.bugs/.saved.url/'`
+    [[ ! -s "$saved_url_file" ]] && echo "Not found $saved_url_file">&2 && continue
+    page_url=`cat $saved_url_file | sed -e's/[\"\ ]//g'`
+    cat "$bugs_file" | awk -F* -vOFS=* -vroot="$root_url" -vpage="$page_url"  '$2 || $3 {print root,page,$0}'
+   done
+ done | # f.e. 000webhost.com*000webhost.com/free-domain-hosting*pagead2.googlesyndication.com/pagead/js/adsbygoogle.js*Google Adsense*ad
+ cut -d* -f1,2,4,5 |   # 000webhost.com*000webhost.com/free-domain-hosting*Google Adsense*ad
+ summator -fu="+cnt" | # 000webhost.com*000webhost.com/free-domain-hosting*Google Adsense*ad*2
+ cut -d* -f1,3,4,5 |   # 000webhost.com*Google Adsense*ad*2
+ summator -fu="sum,+tcnt" # 000webhost.com*Google Adsense*ad*32*14 
+ # where: dom * bug_name * bug_type * all_bugs_on_domain * pages_on_domain( without 0-bugs pages )
+
+#)>>"$0.log" 2>&1

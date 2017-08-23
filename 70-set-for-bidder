@@ -1,0 +1,53 @@
+#!/usr/bin/perl
+use strict;
+use lib '/usr/local/rle/lib/perl';
+use Data::Dumper;
+use RLE::RetargetingClient;
+use Getopt::Long;
+
+GetOptions(
+) or die "Bad opt!";
+
+my $rc = RLE::RetargetingClient->new(1);
+$rc->add("re1.adriver.x", 46000, 1);
+$rc->Connect();
+my ($cat,$val,@cats);
+$rc->{ERRHAND} = sub { warn "cat=$cat,val=$val",Dumper \@cats, Dumper(@_),$_; };
+
+my %stat;
+# IN: (from diff)
+# \d+*\d+*\d+*DELETE
+# \d+*\d+*\d+*INSERT
+
+while(<STDIN>) {
+    chomp;
+    my ($id, $catid, $weight, $action) = split(/\*/, $_, -1);
+    undef @cats;
+    my @todel;
+    #next if $weight eq "NA";
+    if ($action eq "DELETE"){
+	push @todel, $catid;
+    }elsif($action eq "INSERT"){
+	push @cats, { categoryId=>$catid, weight=>$weight };
+    }else{
+	warn("unknown action $action (line = $_)") and next;
+    }
+    
+    #warn "$rc->DelUrlCategories( $id, \\@todel)" if @todel;
+    $stat{ deleted }+=@todel;
+    # включить:
+    $rc->DelUrlCategories( $id, \@todel) if @todel;
+
+    #warn "$rc->SetUrlCategories( $id, \\@cats )" if @cats;
+    # включить:
+    $rc->SetUrlCategories( $id, \@cats ) if @cats;
+    $stat{ sent }+=@cats;
+
+    for my $cat (@cats){
+	#warn "$rc->SetUrlCategoryPersistent( $id, $cat->{categoryId}, 1 )";
+	# включить:
+	$rc->SetUrlCategoryPersistent( $id, $cat->{categoryId}, 1 );
+    }
+}
+
+print "Sent $stat{ sent } vars. Deleted $stat{ deleted } vars.";

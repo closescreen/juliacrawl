@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -u
+set +x
+cd `dirname $0`
+
+source ./00.setenv.sh
+
+#download_dir=${1:-""}
+#[[ -z "$download_dir" ]] && download_dir=`conf 00-RND-195.conf download_dir`
+
+prelast_dir=${1:-""} # можно указать параметр: папка download/<дата>/, где лежит stat.base.bugs.gz и туда же положить результат
+# пример: ~/share3/TIKETS/RND-195/DOWNLOAD/2016-07-18
+
+if [[ -z "$prelast_dir" ]]; then
+    # без параметра, вычислает папку маостоятельно: за предпосленее число
+    # папке
+    down=`conf 00-RND-195.conf download_root` #"/home/d.belyaev/RND-195/DOWNLOAD/"
+    # найти папки по дням и взять предпоследнюю (потому, что последняя сейчас наполняется)
+    prelast_dir=$(  find "$down" -maxdepth 1 -type d -wholename "*/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]" | 
+	sort | tail -n2 | head -n1 )
+fi
+
+[[ -z "$prelast_dir" ]] && exit 0 #echo "not found prelast dir">&2 && exit 1
+
+
+# sz_vars.conv.gz(prelast) + sz_vars.conv.gz(prelast-1) --> sz_vars.conv.diff.gz
+diff_fn="$prelast_dir/sz_vars.conv.diff.gz"
+if [[ ! -s "$diff_fn" ]]; then
+    #echo "Not found $diff_fn">&2
+    diff_fn="$prelast_dir/sz_vars.conv.FULL.diff.gz"
+    [[ ! -s "$diff_fn" ]] && exit 0 # echo "Not found $diff_fn">&2 && exit 1
+fi
+
+
+if [[ ! -s "$prelast_dir/sz_vars.diff.sent" ]]; then
+    zcat "$diff_fn" |
+    awk -F* -vOFS=* '$5=="INSERT"||$5=="DELETE"{print $1,$2,$4,$5}' | # в третьей колонке были old-val, они не нужны
+    #./70-test | # - imitation
+    ./70-set-for-bidder | # - real set
+    viatmp "$prelast_dir/sz_vars.diff.sent"
+fi
+
+
+
+
+
+
+

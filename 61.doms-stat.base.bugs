@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+#>
+#(
+set -u
+set +x
+set -o pipefail
+cd `dirname $0`
+
+# На STDIN подать строки с сайтами
+
+#download_dir=${1:? download_dir!}
+download_dir=${1:-""}
+[[ -z "$download_dir" ]] && download_dir=`conf 00-RND-195.conf download_dir`
+
+
+./9110.site-place "$download_dir/" | # site *ROOT.saved
+ while read dom savedfile; do
+    #echo "$dom $savedfile" # DEBUG
+    urlfile="$savedfile.url"
+    urldir=`dirname $urlfile`
+    if [[ ! -d "$urldir" ]]; then 
+	echo "$dom*0*NA*0"
+	continue
+    fi	
+    #echo -n "$dom*"
+    ff=`find "$urldir" -name "*.bugs"`
+    if [[ -z "$ff" ]]; then
+	echo "$dom*0*NA*0"
+	continue
+    else
+	bugspages=`echo "$ff" | wc -l`
+        cat $ff | awk -F* '{print $3"::"$4}' | LANG=POSIX sort  | summator -fu=+cnt |
+        while read sysname; do
+    	    echo "$dom*$bugspages*$sysname"
+        done
+        #echo ""
+    fi
+    #break
+ done
+
+#>> OUT: 
+#>> 1   dom                     Домен
+#>> 2   bugs_pages              сколько страниц по этому домену просмотрено в поисках рекламных кодов (bugs)
+#>> 3   name_type               Название рекламной сисемы и через :: ее тип
+#>> 4   count_by_name_type      Количество таких (3-я колонка) систем. 
+
+
+
+#)>>"$0.log" 2>&1

@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+#> script [start|stop] [download-dir] doms-fille ["deb"] ["stat"]
+set -u
+set +x
+set -o pipefail
+cd `dirname $0`
+ 
+source ./00.setenv.sh
+ 
+N=1 # количество одновременных процессов, скачивающих корневые страницы доменов
+ 
+if [[ ${1:-""} == "start" ]];then shift && fork -pf="$0.pids" -n="$N" -dela=10 -ed=s "$0 $*"  --wait
+elif [[ ${1:-""}  == "stop" ]];then shift && fork -pf="$0.pids" -kila
+else 
+ 
+ #>1:
+ download_dir=${1:-""}
+ [[ -z "$download_dir" ]] && download_dir=`conf 00-RND-195.conf download_dir`
+
+ 
+ #>2:
+ doms=${2:-""} # параметр может определять файл с доменами
+ if [[ -z "$doms" ]]; then
+    download_day=`echo "$download_dir" | fn2days`
+    domsff=`find ./copyed/ -type f -name "*.$download_day.doms.txt"` # <-- 1460 + handmade
+    #[[ -z "$domsff" ]] && echo "$0: not found doms files in ./copyed/.">&2 && exit 1
+    [[ -z "$domsff" ]] && exit 1 # в понедельник не готов "$domsff" нечего писать ошибку
+ fi
+ 
+ #>3:
+ deb=${3:-""}
+ [[ -n "$deb" ]] && set -x
+ 
+ #>4:
+ stats=${4:-""}
+ 
+ cat $domsff | ./domlevel | sort -u | ./core/in.urls-saved "$download_dir" "$deb" "$stats"
+ 
+fi
+
+

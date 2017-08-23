@@ -1,0 +1,69 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use Data::Dumper;
+use Getopt::Long;
+
+my $usage = q{ Usage: };
+
+require "64.conv.decl.conf"; # - see 'weight()' function in 70.conv.decl.conf
+
+#GetOptions(
+#    
+#) or die "Bad opt!";
+
+
+# IN:
+#  sid:sz      dom    3 4  5 6  7   8 9  10                        11
+# 187537:8343*000a.ru*5*9*18*1*2.5*25*2*tracker=2|ad=2|analytics=6*0
+
+sub db_object_id{
+ # функция db id объекта из sid + sz
+ my ($sid, $sz) = @_;  
+ $sid or die "sid!";  
+ #$sz or die "sz!"; # sz==0 позволено
+ ( $sid << 32 ) | ($sz||0xFFFFFFFF);
+} 
+
+sub db_category_id{
+ # функция db id категории из общего_номера_категории (int, пойдет в старший байт) + номер_переменной (int, пойдет в младшие байты)
+ my ($hi_int, $low_int) = @_;
+ $hi_int or die "Int для старшего байта db id категории !";
+ $low_int or die "Int для младших байтов db id категории !";
+ my $db_cat_id = $hi_int<<56 | $low_int or die("Bad cat id! (from: $hi_int, $low_int)");
+ $db_cat_id
+}
+
+$\="\n";
+my @F;
+while(<STDIN>){
+ chomp;
+ @F = split /\*/, $_, -1; # - fields of input stream
+ # первые два поля: sid:sz * dom:
+ my ($sid, $sz) = split /\:/, $F[0];
+ $sid or warn( "empty sid! (skipped) input line: $_" ) and next;
+ # sz может быть 0, т.к. они попадаются в net/sz_vars
+ #$sz or warn("empty sz! (skipped) input line: $_ ") and next;
+ my $dom = $F[1] or warn("empty dom! (skipped) input line: $_") and next;
+ 
+ for my $field_index (2..$#F){
+  my $varnumber = ind_to_var($field_index);
+  my $srcval = $F[$field_index];
+  die "empty srcval" if !defined($srcval) or $srcval eq "";
+  my ($rv, $desc) = weight($varnumber, $srcval);
+  next if not defined $rv; # возврат undef значит, не спамить значение
+  # возврат 0 значит что 0 возможен и его спамить. Определяется в decl.
+  my $db_category_id = db_category_id(2, $varnumber) or die "db_category_id!"; # - здесь старший байт =2
+  my $db_object_id = db_object_id($sid,$sz) or die "db_object_id!";
+  my $adddesc = "sid:$sid, sz:$sz, (ind:$field_index->var:$varnumber), dom:$dom";
+  my $valdesc = "srcval:$srcval";
+  print join "*", $db_object_id, $db_category_id, $rv, $desc, $adddesc, $valdesc;
+ }
+}
+
+#test:
+#my $rv = weight(100,4);
+#print $rv;
+
+

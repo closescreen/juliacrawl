@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+#> Собирает по спсиску доменов (из handmade) их урлы (tn=0) которые просматривались  и складывает в файлик
+#(
+set -u
+set +x
+set -o pipefail
+cd `dirname $0`
+
+source ./00.setenv.sh
+
+
+if [[ ${1:-""} == "start" ]];then shift && nice fork -pf="$0.pids" -single -dela=3 -ed=s "$0 $*"  --wait
+elif [[ ${1:-""}  == "stop" ]];then shift && fork -pf="$0.pids" -kila
+else 
+# --------- begin of script body ----
+
+deb=${1:-""}
+[[ -n "$deb" ]] && set -x
+
+day=`conf 00-RND-195.conf download_day`
+
+# хоть он называется urlsfile, но ожидаем от туда только домены, чтобы сравнивать их с доменами из history_log
+urlsfile="./copyed/handmade.$day.doms.txt"
+
+[[ `stat -c"%s" "$urlsfile"` -le 20 ]] && echo "$urlsfile not exists">&2 && exit 1  
+
+#urlhist_file="./copyed/urls.hist"
+
+n=24
+for f in `hours -d="$day" -n="$n" | files "./copyed/urls.hist.%FT%H"`;do
+
+if [[ `stat -c"%s" "$f.gz"` -le 20 ]]; then
+
+[[ -s "$f.gz" ]] && echo "Recreate empty $f.gz">&2
+
+job_history_log -c ./history.conf "$f" "uid!=0,typenum=0,ref" -true=ref -cut="typenum,uid" |
+ uniq |
+ ./09-match_urls.pl "$urlsfile" |
+ uniq | # соседние повторы убираем
+ LANG=POSIX sort -T. -t\* -k1,1  | # не уникалим
+ viatmp -gz "$f.gz"
+
+fi
+
+done
+
+mergedf="./copyed/urls.hist.$day.gz"
+if [[ `stat -c"%s" "$mergedf"` -le 20 ]]; then 
+ 
+ [[ -s "$mergedf" ]] && echo "Recreate empty $mergedf">&2
+ hours -d="$day" -n=24 |
+  files "./copyed/urls.hist.%FT%H.gz" | 
+  only -s | # из часов - только то что есть, выключить если нужны все чысы
+  LANG=POSIX mergef -least=20 -m -k=1,1 --stdout |
+  uniq -c | # считаем сколько 
+  awk -vOFS=* '{print $1,$2}' | # cnt * url
+  LANG=POSIX sort -k1,1nr | 
+  viatmp -gz "$mergedf"
+fi
+
+#if [[ -s "$mergedf" ]]; then
+# for f in `hours -d="$day" -n=24 | files "./copyed/urls.hist.%FT%H.gz"`;do
+#  rm "$f"
+# done
+#fi
+
+# --------- end of script bidy ------ 
+fi
+
+#)>>"$0.log" 2>&1

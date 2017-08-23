@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+#> Usage: ./61.STAT.BASE.BUGS /usr/local/rle/var/share3/TIKETS/RND-195/DOWNLOAD/2017-06-19/
+set -u
+set +x
+set -o pipefail
+cd `dirname $0`
+
+source ./00.setenv.sh
+
+download_dir=${1:-""} # like /usr/local/rle/var/share3/TIKETS/RND-195/DOWNLOAD/2017-06-19/
+[[ -z "$download_dir" ]] && download_dir=`conf 00-RND-195.conf download_dir`
+
+download_day=`basename "$download_dir"`
+
+doms=${2:-""}
+[[ -z "$doms" ]] && doms="./copyed/1460.$download_day.doms.txt"
+
+res=${3:-""}
+[[ -z "$res" ]] && res="$download_dir/stat.base.bugs.gz"
+
+cat "$doms"| ./domlevel | sort -u | ./61.doms-stat.base.bugs "$download_dir" | viatmp -gz "$res"
+  
+
+

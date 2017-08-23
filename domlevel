@@ -1,0 +1,46 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use Data::Dumper;
+use Getopt::Long;
+
+# на STDIN подать домены (без путей) [и можно другие поля]
+
+my $usage = q{ Usage: };
+my $dom_field_ind = 0; 
+
+# Приводить к 3 уровню:
+my $d3l = ['\.com\Z', '\.org\Z', '\.net\Z', '\.msk\Z', '\.spb\Z', '\.ucoz\.ru\Z', '\.narod\.ru', '\.com\.ua', 'in\.ua\Z'];
+my $d3l_re = join "|", @$d3l;
+
+# Отбрасывать домены:
+my $skip = ['google\Z', ];
+my $skip_re = join "|", @$skip;
+
+# печатать как есть (вообще не приводить):
+my $as_is = ['dd.asd.lala.ru'];
+my $as_is_re = join "|", @$as_is;
+
+GetOptions(
+    
+) or die "Bad opt!";
+
+$\="\n";
+my @IF; # - input fields
+my $dom;
+while (<STDIN>){
+ chomp;
+ @IF = split /\*/, $_;
+ $dom = $IF[$dom_field_ind] or next;
+ print and next if $as_is_re and $dom=~/$as_is_re/; # печатать как есть из списка $as_is
+ next if $dom=~/$skip_re/; # не печатать из списка $skip
+ my @DF = split /\./, $dom;
+ my @RF = reverse @DF;
+ @RF = $dom=~/$d3l_re/ ? @RF[0..2] : @RF[0..1]; # приводим ко 2-му уровню за исключением из списка $d3l
+ @DF = reverse @RF;
+ $IF[$dom_field_ind] = join(".", grep {$_} @DF);
+ print join "*", @IF ;
+}
+
+#> на выходе или ничего | или неизмененное | или все поля + приведенный домен в том же поле

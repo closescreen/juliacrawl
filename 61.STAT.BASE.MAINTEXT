@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+#>
+set -u
+set +x
+set -o pipefail
+cd `dirname $0`
+
+source ./00.setenv.sh
+
+download_dir=${1:-""}
+[[ -z "$download_dir" ]] && download_dir=`conf 00-RND-195.conf download_dir`
+
+download_day=`basename "$download_dir"`
+
+doms=${2:-""}
+[[ -z "$doms" ]] && doms="./copyed/1460.$download_day.doms.txt"
+
+res=${3:-""}
+[[ -z "$res" ]] && res="$download_dir/stat.base.maintext.gz"
+
+cat "$doms"| ./domlevel | sort -u | julia ./61.doms-stat.base.text.jl --download="$download_dir" | viatmp -gz "$res"
+  
+
+

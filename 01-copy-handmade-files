@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+#> список доменов из handmade для "чистого текста" , а потом для ключевых слов.
+
+#> создает в ./copyed/ файлы вида urls.*.$day.txt  
+
+set -u
+set +x
+set -o pipefail
+cd `dirname $0`
+
+source ./00.setenv.sh
+
+# День можно указать...
+day=${1:-""} 
+# ...или он будет прошлым понедельником:
+[[ -z "$day" ]] && day=`conf 00-RND-195.conf download_day`
+
+
+if [[ ! -s "./copyed/handmade.$day.doms.txt" ]]; then
+ # список доменов из интересуемых категорий:
+ cat /home/d.belyaev/share/IKA/etc/site2category.txt | 
+    awk -vOFS=* '$3~"Банк|Страхов|Гипермаркеты_электроники"{print $1}' | # отбираем нужные категории
+    grep -v -P '\/' | # не берем с путями
+    viatmp "./copyed/handmade.$day.doms.txt"
+    
+fi
+ 
+
+
+ 
+#>! потом список урлов перевести в список конкретных урлов
+
+
+
+
+

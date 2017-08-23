@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+#> Статистика 
+set -u
+set +x
+set -o pipefail
+cd `dirname $0`
+
+source ./00.setenv.sh
+
+N=1
+
+if [[ ${1:-""} == "start" ]];then shift && nice fork -pf="$0.pids" -n="$N" -dela=3 -ed=s "$0 $*" # --wait
+elif [[ ${1:-""}  == "stop" ]];then shift && fork -pf="$0.pids" -kila
+else 
+
+ nice ./61.STAT.BASE.BUGS
+ 
+ nice ./61.STAT.BASE.MAINTEXT
+
+ nice ./64.SZVARS
+ 
+ nice ./70.SET-FOR-BIDDER # set! 
+
+ nice ./9140.bugs.on.domains.create
+ 
+ nice ./9150.bugs.on.domains.top.det.create
+
+fi
+

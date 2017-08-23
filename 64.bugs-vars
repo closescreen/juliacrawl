@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+#>
+#(
+set -u
+set +x
+set -o pipefail
+cd `dirname $0`
+
+# INPUT:
+# stat.base.bugs.gz format:
+# --------------------------
+# gismeteo.ru*4*AdRiver::ad*1
+# gismeteo.ru*4*Criteo::ad*2
+# gismeteo.ru*4*Google Analytics::analytics*1
+# gismeteo.ru*4*LiveInternet::analytics*1
+
+# awk: добавляем колонку: 
+#  "тип bug=cnt"
+# итого: 1.dom * 2.pages * 3.bugname * 4.bugcnt * 5.by_bugs (например, "Google Analytics::analytics=1")
+awk -F* -vOFS=* '{print $0, $3"="$4 }' | 
+ summator -fu="first,cnt,sum,turn" | 
+ # Расшифровка сумматора:
+ # 1.по ключу dom:
+ # 2.кол-во страниц (first-первое значение)
+ # 3.уникальных bugs (cnt-кол-во строк)
+ # 4.сумма bugs на всех стр (sum-сумма зн )
+ # 5.список bugs-количеств bugs B1=N1|B2=N2|... через '|'
+ # --------------------------
+ lae -lb="dom  pages  bugs_uniq  bugs_on_allpg  by_bugs" '
+ my $minpages = sub{ Pages()>=4 }; #true/false
+  _{	
+	my $bugs_uniq = $minpages->()? Bugs_uniq : "NA";
+	my $bugs_on_pg = $minpages->()? int( Bugs_on_allpg / Pages) : "NA";
+	my $bugs_on_pg_div_uniq = $minpages->()? int( ($bugs_on_pg / Bugs_uniq) * 10) : "NA";
+	
+	# в поле by_bugs лежат по bugs: "Google Analytics::analytics=1|AdRiver::ad=1|..."
+	my %sum_by_types; my %uniq_by_types; my %sum_by_types_names;
+	
+	BUG:for my $bug_cnt ( split /\|/, By_bugs ){
+	    my ($bug, $cnt) = split /\=/, $bug_cnt;
+	    { no warnings; 0+$cnt or next BUG }	
+	    my ($bugname, $bugtype) = split(/\:\:/, $bug);
+	    $bugname and $bugtype or next BUG;
+	    $sum_by_types{$bugtype} += $cnt; # analytics=>1, ...
+	    $uniq_by_types{$bugtype} +=1; # analytics=>1, ...
+	    $sum_by_types_names{$bugtype}{$bugname} += $cnt; # ad=>{"Google Analytics"=>1, ...}
+	}
+	
+	my %sum_on_page_by_types;
+	if ( $minpages->() ){
+	    for my $type (keys %sum_by_types){
+		$sum_on_page_by_types{ $type } = $sum_by_types{$type} / Pages;
+	    }
+	}    
+
+	my $ad_uniq = $minpages->()? $uniq_by_types{ad}||0 : "NA";
+	my $ad_on_pg = $minpages->()? int( $sum_on_page_by_types{ ad }||0 ) : "NA";
+	my $ad_on_pg_div_uniq = $minpages->() && $ad_uniq? int( ($ad_on_pg / $ad_uniq) * 10) : "NA";
+	
+	my %type_div_bugs_uniq;
+	if ( $minpages->() ){
+	    for my $k (keys %sum_by_types){
+		$type_div_bugs_uniq{ $k } = int(($uniq_by_types{$k} / $bugs_uniq) * 10);
+	    }
+	}
+	
+	#my $ad_div_bugs_uniq = $minpages->()? $type_div_bugs_uniq{ ad }||0 : "NA";
+	
+	my @need_types = ("ad", "analytics", "privacy", "tracker", "widget", "teaser");
+	
+	for my $t ( @need_types ){
+	    $type_div_bugs_uniq{ $t } = $minpages->() ? 
+		$type_div_bugs_uniq{ $t }||0 :
+		"NA";
+	}
+	
+	
+	my $expand = join "|", map {"$_=$type_div_bugs_uniq{$_}"} grep {$_} keys %type_div_bugs_uniq;
+	
+	# Одновременное присутствие типов ad: Google и Yandex:
+	my $adYG = "NA";
+	if ( $minpages->() ){
+	    $adYG = 0;
+	    if ( $sum_by_types_names{ ad } ){
+		my %ad_names = %{ $sum_by_types_names{ ad } };
+		$adYG=1 if 
+		    grep {/google/i} keys %ad_names and 
+		    grep {/yandex/i} keys %ad_names;
+	    }
+	}    
+		
+
+	# vars:         v1          v2               v3              v4        v5             v6                v7-v12                        v100
+	print Dom, $bugs_uniq, $bugs_on_pg, $bugs_on_pg_div_uniq, $ad_uniq, $ad_on_pg, $ad_on_pg_div_uniq, @type_div_bugs_uniq{@need_types}, $adYG;
+  }	
+ '
+
+
+#)>>"$0.log" 2>&1
+
+
+
+
+
+
+
+
+
+
+

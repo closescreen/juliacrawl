@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+
+# сравнивает два site2cat_conv и делать дифф 
+# или делает начальный дифф, где все будет INSERT
+
+# 805465281866940*72057594037927987*0
+# 889195669225471*72057594037927987*0
+
+#> Usage: 
+
+#> 1) для получения дифа по двум файлам, нужно пустить на STDIN отсортированные отуникаленные(они уже) и смерженные по id(1поле), catid(2поле)  их потоки, 
+#>  добавив дополнительную колонку к каждому потоку: "P" - для предыдущих значений, "C" - для текущих. 
+
+#>  file1=../1460/RESULT/10/2015-08-03/ssp/3/s2c_conv.gz
+#>  file2=../1460/RESULT/10/2015-08-04/ssp/3/s2c_conv.gz
+#>  LANG=POSIX sort  <(zcat "$file1" | perl -lne'print $_."*P"')  <(zcat "$file2" | perl -lne'print $_."*C"') -k1,1n -k2,2n | ./52_urlvars_diff"
+	    
+
+#> 2) для получения начального дифа (для первой загрузки ) - пустить на вход поток этого файла, без добавления колонки.
+#>  zcat ~/1460/RESULT/10/2015-08-03/net_sites/0/url_vars_30days.gz | ./52_urlvars_diff | head
+
+#> Формат файлов должен соответствовать описанию ниже. Разделитель - *.
+
+lae -t=t -lb="id catid weight desc version" '
+# version = "P" | "C" (prev/current)
+
+my %lines;
+_{
+ flush() if ( Id != prevId or Catid != prevCatid ) and prevId; 
+ #> если поле Version пустое, то считается "C"-current. Для случаев когда дифф делается по одному файлу, для начальной загрузки.
+ $lines{ $F[VERSION]||"C" } = {w=>Weight, d=>Desc};  
+} -prev=>"id=0,catid=0";
+flush();
+
+sub flush{
+ my $id = prevId;
+ my $catid = prevCatid;
+ if ( exists $lines{C} ){
+    my $curr_weight = $lines{C}{w};
+    my $curr_desc = $lines{C}{d}||"no desc";
+    if ( not exists $lines{P} ){
+	# если в текущем - есть , а в предыдущем - нет:
+	print join "\t", $id, $catid, $curr_weight, "INSERT", $curr_desc;
+    }else{
+	# если есть и в текущем и в предыдущем (но могут значения в полях отличаться) (хотя в данной версии - не могут, они=0):
+	my $prev_weight = $lines{P}{w};
+	my $prev_desc = $lines{P}{d}||"no desc";
+	if ($curr_weight != $prev_weight ){
+	    print join "\t", $id, $catid, $curr_weight, "INSERT", "$curr_desc"; # delete не требуется
+	}
+	# не различаются - ничего не делать.
+    }
+ }elsif( exists $lines{P} ){
+    # нет текущего но существует предыдущий
+    my $prev_weight = $lines{P}{w};
+    my $prev_desc = $lines{P}{d}||"no desc";
+    print join "\t", $id, $catid, $prev_weight, "DELETE", "$prev_desc";
+ }
+ %lines = (); 
+}
+'
+
