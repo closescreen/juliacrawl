@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+#> отчет:
+#> по доменам из handmade.<day>.doms ---> по их урлам ---> dom, url, title, ключевые слова
+#(
+set -u
+set +x
+set -o pipefail
+mydir=`readlink -f $(dirname $0)`
+cd "$mydir"
+source ./00.setenv.sh
+
+N=1 # количество процессов
+
+if [[ ${1:-""} == "start" ]];then shift && nice fork -pf="$0.pids" -n="$N" -dela=3 -ed=s "$0 $@"  --wait # enable -wait or redirect out to log
+elif [[ ${1:-""}  == "stop" ]];then shift && fork -pf="$0.pids" -kila
+else 
+# --------- begin of script body ----
+
+
+
+# определить download_dir:
+downl=${1-""} # < ----[ можно указать download_dir параметром]
+[[ -z "$downl" ]] && cd .. && downl=`conf ./00-RND-195.conf download_dir` && cd "$mydir"
+
+
+# определить день:
+day=`echo "$downl" | fn2days`
+[[ -z "$day" ]] && echo "day!">&2 && exit 1
+
+
+res_keywordsf="$downl/keywords.gz"
+
+
+# Вариант, когда берем домены и строим отчет по всем страницам, которые уже имеем main.text
+
+# берем домены из handmade:
+doms="../copyed/handmade.$day.doms.txt"
+[[ ! -s "$doms" ]] && echo "$doms file not found!">&2 && exit 1
+
+# найти соотв. доменам скачанные файлы в DOWNLOAD
+cat "$doms" | # домены
+ ../9110.site-place "$downl" | # из доменов -> пары [dom root.saved] 
+ ./IN-dom-saved.OUT-dom-url-title-kwds.jl | # из root.saved -> отчет по всем страницам домена, (которые имеют maintext)
+ viatmp -gz "$res_keywordsf"
+
+
+
+# в отчете нужно:
+#  - домен
+#  - saved.url --> url
+#  - saved --> title
+#  - main.text через --> textract.py (нормализованые слова) --> через rake.py (ключевые слова)
+
+
+
+
+# --------- end of script bidy ------ 
+fi
+
+#)>>"$0.log" 2>&1
